@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -6,7 +7,12 @@ from datetime import datetime, date
 import uvicorn
 
 app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+
+# Fallback: Check if 'templates' folder exists, otherwise use current folder
+if os.path.exists("templates"):
+    templates = Jinja2Templates(directory="templates")
+else:
+    templates = Jinja2Templates(directory=".")
 
 # In-memory storage
 signals = []
