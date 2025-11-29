@@ -33,6 +33,11 @@
         .pnl-positive { color: #4caf50; }
         .pnl-negative { color: #f44336; }
         .status-badge { background: #333; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; color: #aaa; }
+        
+        /* Live Price Animation */
+        .flash-up { color: #00ff00; transition: color 0.2s; }
+        .flash-down { color: #ff4444; transition: color 0.2s; }
+        .live-price { font-weight: bold; color: #ffeb3b; }
     </style>
 </head>
 <body>
@@ -59,16 +64,20 @@
     <table id="signalsTable">
         <thead>
             <tr>
-                <th>Date & Time</th><th>Ticker</th><th>Action</th><th>Entry</th><th>Stop Loss</th><th>TP 1</th><th>TP 2</th><th>TP 3</th><th>Status</th>
+                <th>Date & Time</th><th>Ticker</th><th>Action</th><th>Entry</th><th>Current Price</th><th>Stop Loss</th><th>TP 1</th><th>TP 2</th><th>TP 3</th><th>Status</th>
             </tr>
         </thead>
         <tbody>
             {% for signal in signals %}
-            <tr class="signal-row" data-action="{{ signal.action|lower }}" data-entry="{{ signal.price }}">
+            <tr class="signal-row" data-action="{{ signal.action|lower }}" data-entry="{{ signal.price }}" data-ticker="{{ signal.ticker }}">
                 <td>{{ signal.time }}</td>
                 <td>{{ signal.ticker }}</td>
                 <td class="{{ 'buy' if signal.action|lower == 'buy' else 'sell' }}">{{ signal.action.upper() }}</td>
                 <td class="price-cell">{{ signal.price }}</td>
+                
+                <!-- LIVE PRICE CELL -->
+                <td class="price-cell live-price" id="price-{{ signal.ticker|replace('MEXC:', '')|replace('.P', '')|lower }}">---</td>
+                
                 <td class="price-cell target-cell" data-price="{{ signal.sl }}">{{ signal.sl }}</td>
                 <td class="price-cell target-cell" data-price="{{ signal.tp1 }}">{{ signal.tp1 }}</td>
                 <td class="price-cell target-cell" data-price="{{ signal.tp2 }}">{{ signal.tp2 }}</td>
@@ -84,6 +93,44 @@
     {% endif %}
 
     <script>
+        // 1. Connect to Binance WebSocket for Real-Time Prices
+        const rows = document.querySelectorAll('.signal-row');
+        const tickers = new Set();
+        
+        rows.forEach(row => {
+            let ticker = row.getAttribute('data-ticker');
+            // Clean ticker: MEXC:ETHUSDT.P -> ethusdt
+            if(ticker) {
+                ticker = ticker.replace('MEXC:', '').replace('.P', '').toLowerCase();
+                tickers.add(ticker);
+                // Store cleaned ticker in row for easy access
+                row.setAttribute('data-clean-ticker', ticker);
+            }
+        });
+
+        if (tickers.size > 0) {
+            const streams = Array.from(tickers).map(t => `${t}@miniTicker`).join('/');
+            const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streams}`);
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                const ticker = data.s.toLowerCase();
+                const price = parseFloat(data.c); // Current price
+
+                // Update Price Cell
+                const priceCell = document.getElementById(`price-${ticker}`);
+                if (priceCell) {
+                    const oldPrice = parseFloat(priceCell.textContent);
+                    priceCell.textContent = price;
+                    
+                    // Flash effect
+                    priceCell.classList.remove('flash-up', 'flash-down');
+                    if (oldPrice && price > oldPrice) priceCell.classList.add('flash-up');
+                    else if (oldPrice && price < oldPrice) priceCell.classList.add('flash-down');
+                }
+            };
+        }
+
         function updatePnL() {
             const margin = parseFloat(document.getElementById('marginInput').value) || 0;
             const leverage = parseFloat(document.getElementById('leverageInput').value) || 1;
@@ -111,6 +158,7 @@
                 });
             });
         }
+        
         document.addEventListener('DOMContentLoaded', updatePnL);
     </script>
 </body>
